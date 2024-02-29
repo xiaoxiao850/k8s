@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    pipeline: {{ .ObjectMeta.Name }} # facedetection-pipeline
+    step: {{.Index}}  # steps[0] 对应第一阶段 facedetection-1
+  name: {{ .Step.Model }}   # facedetection-1
+  namespace: pipeline # {{ .ObjectMeta.Namespace }}
+spec:
+  replicas: {{.Spec.Replicas}}
+  selector:
+    matchLabels:
+      pipeline: {{ .ObjectMeta.Name }} # facedetection-pipeline
+      step: {{.Index}}  # steps[0] 对应第一阶段
+  strategy: {}
+  template:
+    metadata: 
+      creationTimestamp: null
+      labels:
+        pipeline: {{ .ObjectMeta.Name }} # facedetection-pipeline
+        step: {{.Index}}  # steps[0] 对应第一阶段
+    spec:
+      containers:
+      - image: {{ .Step.Image }}  # steps[0] 的 image 值作为镜像
+        imagePullPolicy: IfNotPresent
+        name: {{ .Step.Model }} # facedetection-1
+        ports:
+        - containerPort: {{.Spec.ListenPort}}
+        # 挂载 PVC 卷，名字为 steps[0] 的 model 值
+        volumeMounts:
+        - name: {{ .Step.Model }}  # facedetection-1
+          mountPath: /data  # 实际的挂载路径
+        env:  # 在这里添加环境变量
+        - name: begin
+          value: "{{.Begin}}"  # 如果是steps[0]，则begin: true，否则false
+        - name: dst
+          value: "{{ .NextStep.Model }}"  # facedetection-2，该step下一跳的service名， 
+        - name: modelPath
+          value: "/data/{{ .Step.Model }}"   
+        - name: listenPort
+          value: "9080"  
+        - name: args
+          value: "{{  index .Step.Args }}"  
+      volumes:
+      - name: {{ .Step.Model }} #facedetection-1
+        persistentVolumeClaim:
+          claimName:  {{printf "%s-pvc" .ObjectMeta.Name}} # facedetection-pipeline
+    # 使用 nodeAffinity 指定节点的调度
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In 
+                values: 
+                  - {{ .Step.Location }}
+status: {}

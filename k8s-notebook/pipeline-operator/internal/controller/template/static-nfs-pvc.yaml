@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{printf "%s-pvc" .ObjectMeta.Name}} # facedetection-pipeline
+  namespace: pipeline # pipeline
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: "" # 此处须显式设置空字符串，否则会被设置为默认的 StorageClass
+  volumeName: {{printf "%s-pv" .ObjectMeta.Name}}  # facedetection-pipeline

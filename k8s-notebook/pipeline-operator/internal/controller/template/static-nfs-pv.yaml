@@ -1,0 +1,18 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{printf "%s-pv" .ObjectMeta.Name}} # facedetection-pipeline
+  namespace: pipeline # pipeline
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  csi:
+    driver: nfs.csi.k8s.io
+    readOnly: false
+    volumeHandle: {{ printf "%s%s/%s" .NFSServer .NFSShare .ObjectMeta.Name}}  # #server/share/pvname
+    volumeAttributes:
+      server: {{ .NFSServer }} # 192.168.20.235
+      share: {{ printf "%s/%s" .NFSShare .ObjectMeta.Name}} 
