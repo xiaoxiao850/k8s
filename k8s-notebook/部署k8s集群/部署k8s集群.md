@@ -345,6 +345,16 @@ $ sudo keadm join --cloudcore-ipport=192.168.20.235:32736 --certport 30821 --run
 
 ### 部署遇到的问题：
 
+问题：部署一个节点的k8s上弄kubeEdge
+
+https://kubeedge.io/zh/docs/faq/setup/
+
+We can see that the reason is that `0/1 nodes are available: 1 node(s) had taint {node-role.kubernetes.io/control-plane: }, that the pod didn't tolerate.` This is often occurs when you only have one control plane node. By default, your cluster will not schedule Pods on the control plane nodes for security reasons. If you want to be able to schedule Pods on the control plane nodes, for example in a single machine Kubernetes cluster, run: `kubectl taint nodes --all node-role.kubernetes.io/control-plane- node-role.kubernetes.io/master-` For more details, please refer to [k8s docs](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#control-plane-node-isolation). And then you can find your `cloudcore` is running successfully and in `Running` status.
+
+`kubectl taint nodes --all node-role.kubernetes.io/control-plane-`
+
+
+
 问题：execute keadm command failed:  edge node join failed: copy resources failed: rpc error: code = DeadlineExceeded desc = context deadline exceeded...
 
 解决：添加一个参数信息：`--runtimetype=docker`  。`--kubeedge-version=1.13.0`
