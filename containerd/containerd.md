@@ -35,3 +35,37 @@ containerd 相比Docker多了`namespace`的概念，常见的namespace：`defaul
 `ctr c info nginx_1`查看容器详细配置
 `ctr  -n k8s.io t metrics nginx_1`查看容器使用指标
 `ctr  -n k8s.io exec --exec-id 0 -t nginx`
+
+# containerd 与 容器网络
+**容器运行时负责调用CNI插件，由CNI插件执行特定网络配置功能的程序**
+> `Dockershim`不支持CNI，k8s1.24移除了`Dockershim`之后，CNI的管理不再是kubelet的工作，而是对应的cri（containerd）来进行管理
+
+- CNI插件配置文件 默认在`/etc/cni/net.d`中
+- CNI插件二进制 默认在`opt/cni/bin`中
+
+## 配置容器网络
+`ip netns list` 其实就是`/var/run/netns`目录下的文件
+`ip netns add NAME`
+`ip netns attach NAME PID`
+`ip netns set NAME NETNSID`
+
+`ip netns exec <net ns> <shell>`
+
+## 插件分类
+### main类插件
+即接口式插件
+#### bridge插件
+在宿主机上创建一个`Linux bridge设备`（虚拟交换机），然后通过`veth pair`将网桥和容器网络命名空间中的接口连接起来，实现容器网络互通以及容器和主机网络互通。
+
+#### VLAN插件
+
+
+### ipam类插件
+`ipam`即`ip address management`
+dhcp：向DHCP服务器发送DHCP请求
+host-local 维护本地数据库进行IP分配
+static：静态，为容器分配指定的地址
+### meta类插件
+即链式插件
+
+

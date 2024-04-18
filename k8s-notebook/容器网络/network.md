@@ -241,6 +241,8 @@ iptables是**位于用户空间**的一个面向系统管理员的Linux防火墙
 ##### **1）iptables的四表五链**
 
 ![img](img\iptables.png)
+链的含义是对流量进行操作时流量当前所处的状态，也就是对流量进行操作的时机。
+表（table）定义了如何对流量进行操作，也就是具体对流量实施什么行为。
 
 括号内的就是iptables的**四表(nat、 fifter、 raw、 mangle，新加了一个security表（变为五表） )**，而每个模块都可以视为一个链，**五链(INPUT、 OUTPUT、 PREROUTING 、FORWARD 、POSTROUTING)**
 四表：
@@ -513,9 +515,13 @@ docker run -p 1234:80 -d nginx
 9. nginx-2容器插在docker0网桥上的另一块虚拟网卡，数据包就进入到了nginx-2容器的Network Namespace里
 
 ### 跨主机网络解决方案
+1. Overlay网络方式
+相互连接的overlay设备之间建立隧道，数据包准备传输时，**设备为数据包添加新的IP头部和隧道头部**，并且屏蔽掉内层的Ip头部，数据包根据新的IP包转发。当数据包传递到另一个设备后，外部IP头和隧道头将被丢弃，得到原始数据包。
+常见的：VXLAN（L2 over UDP <mac header>），Flannel UDP模式（L3）
+2. Underlay主机路由方式
+纯路由实现，数据只经过协议栈一次。
+常见的：Flannel host-gw模式（路由中的下一跳是宿主机的ip）。Calico的BGP模式（路由的维护是利用BGP协议）
 
-- docker原生的overlay和macvlan
-- 第三方的flannel、weave、calico
 
 基于Linux桥接与VXLAN解决容器的跨主机通信问题
 
