@@ -26,3 +26,4 @@ containerd 相比Docker多了`namespace`的概念，常见的namespace：`defaul
 `ctr run`等效于`ctr container create`+`ctr task start`
 `ctr c info nginx_1`查看容器详细配置
 `ctr  -n k8s.io t metrics nginx_1`查看容器使用指标
+`ctr  -n k8s.io exec --exec-id 0 -t nginx`
