@@ -3,6 +3,14 @@ container runtime是一个管理容器所有运行进程的工具，包括创建
 低级容器运行时：和底层操作系统打交道，管理容器的生命周期，常见的容器运行时如runc，
 高级容器运行时：是对低级容器运行时的进一步封装，专注于多个容器管理及容器镜像管理，常见的容器运行时：containerd，Docker，cri-o,podman
 
+# Cgroups
+- `cgroup控制组`：以控制组为单元来进行资源控制，控制组是由树状结构关系的，子控制组汇集成夫控制组的属性（资源配额，限制）
+- `subsys_name子系统` 或 `controller控制器`：如memory controller可以控制内存，cpu...
+- `hierarchy层级`：作为控制组的根目录来绑定 `子系统`从而达到资源的控制。一个子系统最多能被添加到一个层级中。
+- `task任务`：父子进程
+![alt text](cgroup.jpg)
+Cgroups v1中，各个子系统都是独自实现并单独挂载
+
 # containerd
 是一个守护进程，在单个主机上管理主机完整的容器生命周期，包括创建、启动、停止容器以及存储镜像、配置挂载、配置网络等。
 containerd 从docker Engine剥离出来
