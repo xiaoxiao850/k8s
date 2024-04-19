@@ -147,6 +147,8 @@ ifconfig veth0 10.1.1.2/24 up
 ```
 
 此时，可以ping通veth pair的任意一头，在主机上ping 10.1.1.1 。进入netns1去ping 10.1.1.2
+![alt text](veth-pair.png)
+数字是veth pair的index，一头是4另一头是3
 
 ### Linux bridge
 
@@ -159,7 +161,7 @@ ifconfig veth0 10.1.1.2/24 up
 ![在这里插入图片描述](img\bridge.png)
 
 ```bash
-[root@aliyun ~]# yum install -y bridge-utils
+[root@aliyun ~]# apt install  bridge-utils
 
 # 创建网桥
 [root@aliyun ~]# brctl addbr br0 
