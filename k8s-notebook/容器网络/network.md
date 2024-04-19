@@ -15,7 +15,19 @@ docker 4种网络模型：bridge ，host , none , container。默认网络模型
 
 **作用**：隔离linux 系统的设备，ip 地址，端口，路由表，防火墙等网络资源。
 
-**`namespace`的增删改查 集成到 linux 的 ip 工具`netns`命令中**。涉及系统调用 `clone`，`unshare`，`setns`
+**`network namespace`的增删改查 集成到 linux 的 ip 工具`netns`命令中**。涉及系统调用 `clone`，`unshare`，`setns`
+- `ip netns add netns1`创建名为netns1的network namespace，此时系统会在`/var/run/netns`路径下生成一个挂载点。此时，会附带创建一个本地回环地址。除此之外，没有任何其他的网络设备。
+- `ip netns exec netns1 ip link list`进入net ns，做网络查询。
+- `ip netns list`查看系统中有哪些net ns
+- `ip netns delete netns1`移除了这个network namespace对应的挂载点，只要里面还有进程运行着，network namespace便会一直存在
+访问本地回环地址：
+- `ip netns exec netns1 ip link set dev lo up`将lo设备启起来
+![alt text](netns1.png)
+与外界（主机上的网卡）通信
+在namespace里再创建一对虚拟的以太网卡，即所谓的veth pair。（详细见下节 ### veth pair）
+- `ip link add veth0 type veth peer name veth1`创建一对虚拟以太网卡，此时两端都在主机的netns中。然后把veth pair的一端放到netns1 network namespace。`ip link set veth1 netns netns1`
+- `ip netns exec netns1 ifconfig veth1 10.1.1.1/24 up`进入netns1，为veth1绑定IP地址10.1.1.1/24，并把网卡的状态设置成UP。`ifconfig veth0 10.1.1.2/24 up`主机的一端veth0被我们绑定了IP地址10.1.1.2/24，并把网卡的状态设置成UP
+![alt text](netns1-vethpair.png)
 
 #### PID
 
@@ -234,7 +246,7 @@ IP层5个钩子点对应iptables的5条内置链
 
 #### iptables
 
-iptables是**位于用户空间**的一个面向系统管理员的Linux防火墙的管理工具，而iptables的底层实现是Netfilter，Linux内核通过Netfilter实现网络访问控制功能
+iptables是**位于用户空间**的一个面向系统管理员的Linux防火墙的管理工具，而iptables的底层实现是Netfilter，Linux内核通过Netfilter实现对报文数据包过滤和修改，在不同阶段将某些钩子函数作用于网络协议栈。
 
 **iptables三板斧：table、chain、rule**
 
@@ -248,7 +260,7 @@ iptables是**位于用户空间**的一个面向系统管理员的Linux防火墙
 四表：
 
 -  **fifter表**：对数据包进行过滤（**放行、丢弃drop、拒接reject**），其表内包括三个链：input、forward、output
--  **nat表**：网络地址转换，用于修改数据包的源和目的地址。,其表内包括三个链：DNAT**(prerouting、output**)、SNAT(**postrouting、input**)
+-  **nat表**：网络地址转换，用于修改数据包的源和目的地址。,其表内包括三个链：DNAT(**prerouting、output**)、SNAT(**postrouting、input**)
 -  **raw表**：是否对数据包进行状态跟踪trackin，其表内包括两个链：output、prerouting
 -   **mangle表**：修改数据包IP头信息，其表内包括五个链
 -   **security表**：新特性
