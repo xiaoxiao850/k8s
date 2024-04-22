@@ -3,6 +3,7 @@ container runtime是一个管理容器所有运行进程的工具，包括创建
 低级容器运行时：和底层操作系统打交道，管理容器的生命周期，常见的容器运行时如runc，
 高级容器运行时：是对低级容器运行时的进一步封装，专注于多个容器管理及容器镜像管理，常见的容器运行时：containerd，Docker，cri-o,podman
 
+容器的本质是 Namespace + Cgroups + rootfs
 # Cgroups
 - `cgroup控制组`：以控制组为单元来进行资源控制，控制组是由树状结构关系的，子控制组汇集成夫控制组的属性（资源配额，限制）
 - `subsys_name子系统` 或 `controller控制器`：如memory controller可以控制内存，cpu...
