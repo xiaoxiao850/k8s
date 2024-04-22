@@ -140,6 +140,7 @@ sudo ip netns exec docker1 route add default gw 172.18.0.1 veth2
 在和宿主机同一个局域网的远程主机访问宿主机IP:80 `telnet 192.168.20.250 80`
 ![alt text](image-29.png)
 ![alt text](image-30.png)
+数据流向：DNAT –> Bridge -> Veth。
 
 ### 测试环境恢复
 删除虚拟网络设备
