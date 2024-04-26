@@ -4,12 +4,16 @@ https://github.com/mz1999/blog/blob/master/docs/docker-network-bridge.md
 # network namespace
 
 # 网络虚拟化技术
-## veth 
+## veth Pairs
 Veth 是成对出现的虚拟网络设备 发送 Veth 一端虚 设备 请求会 另一端
 备中发出。在容器的虚拟 场景中，经常会使 Veth 连接不同的网络Namespace
 
 ## Linux bridge
 Bridge 虚拟设备是用来桥接的网络设备，它相当于现实世界中的交换机 可以连接不同的网络设备，当请求到达 Bridge 设备时，可以通过报文中的 Mac 地址进行广播或转发。例如，创建 Bridge 设备，来连接 Namespace 中的网络设备和宿主机上的网络
+
+## iptables
+容器需要能够访问外部世界，同时也可以暴露服务让外界访问，这时就要用到iptables。另外，不同bridge之间的隔离也会用到iptables。
+
 
 ## 实验
 ![alt text](bridge-vethpair.png)
@@ -151,7 +155,7 @@ sudo ip link  del Tveth1
 sudo ip link  del Tveth3
 ```
 iptablers和Namesapce的配置在机器重启后被清除。
-# iptables
+
 
 # docker容器网络
 https://blog.csdn.net/succing/article/details/122433770
