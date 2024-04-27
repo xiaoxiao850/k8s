@@ -2,6 +2,10 @@ https://www.lixueduan.com/posts/docker/10-bridge-network/
 https://github.com/mz1999/blog/blob/master/docs/docker-network-bridge.md
 《自己动手写Docker》
 # network namespace
+`ip netns` 命令完成对 Network Namespace 
+新创建的 Network Namespace 会出现在`/var/run/netns/`目录下
+对于每个 Network Namespace 来说，它会有自己独立的网卡、路由表、ARP 表、iptables 等和网络相关的资源。
+`ip netns exec` 子命令可以在对应的 Network Namespace 中执行命令
 
 # 网络虚拟化技术
 ## veth Pairs
@@ -159,9 +163,15 @@ iptablers和Namesapce的配置在机器重启后被清除。
 
 # docker容器网络
 https://blog.csdn.net/succing/article/details/122433770
+安装 Docker 以后，会默认创建三种网络，可以通过 docker network ls 查看。
+![alt text](image-31.png)
+
 docker的4种网络模式
-bridge模式
-container模式
-host模式
-none模式
+## bridge模式
+在该模式中，Docker 守护进程创建了一个虚拟以太网桥 docker0，新建的容器会自动桥接到这个接口，附加在其上的任何网卡之间都能自动转发数据包。
+默认情况下，守护进程会创建一对对等虚拟设备接口 veth pair，将其中一个接口设置为容器的 eth0 接口（容器的网卡），另一个接口放置在宿主机的命名空间中，以类似 vethxxx 这样的名字命名，从而将宿主机上的所有容器都连接到这个内部网络上。
+
+## container模式
+## host模式
+## none模式
 # 跨主机容器网络
