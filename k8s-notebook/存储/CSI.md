@@ -6,6 +6,258 @@
 
 ------
 
+func (r *PipelineReconciler) syncStorageVolume(pipeline *distriinferv1.Pipeline, ctx context.Context, modelVolume bool) error {
+
+  logger := log.FromContext(ctx)
+
+  //查找同名pv-->exist,not found,
+
+  fmt.Printf("处理pv...\n")
+
+  var pvkey types.NamespacedName
+
+  var pvckey types.NamespacedName
+
+  var newpv *corev1.PersistentVolume
+
+  var newpvc *corev1.PersistentVolumeClaim
+
+
+
+  if modelVolume { //如果是model的存储
+
+​    pvkey = r.getModelPVkey(*pipeline)
+
+​    pvckey = r.getModelPVCkey(*pipeline)
+
+​    newpv, newpvc = utils.NewModelStorageVolume(pipeline)
+
+​    // pipeline.Status.DetailPhase.StoragePhase.Context = string(distriinferv1.StorageContextModel)
+
+
+
+  } else { //如果是config的存储
+
+​    pvkey = r.getConfigPVkey(*pipeline)
+
+​    pvckey = r.getConfigPVCkey(*pipeline)
+
+​    newpv, newpvc = utils.NewConfigStorageVolume(pipeline)
+
+​    // pipeline.Status.DetailPhase.StoragePhase.Context = string(distriinferv1.StorageContextConfig)
+
+  }
+
+  pv := &corev1.PersistentVolume{}
+
+  pvc := &corev1.PersistentVolumeClaim{}
+
+
+
+  if err := controllerutil.SetControllerReference(pipeline, newpv, r.Scheme); err != nil {
+
+​    logger.Error(err, "SetControllerReference failed!")
+
+​    return err
+
+  }
+
+  if err := controllerutil.SetControllerReference(pipeline, newpvc, r.Scheme); err != nil {
+
+​    logger.Error(err, "SetControllerReference failed!")
+
+​    return err
+
+  }
+
+
+
+  if err1 := r.Get(ctx, pvkey, pv); err1 != nil {
+
+​    if k8serrors.IsNotFound(err1) { //not found->create
+
+​      fmt.Printf("pvIsNotFound\n")
+
+​      if err := r.Create(ctx, newpv, &client.CreateOptions{}); err != nil {
+
+​        logger.Error(err, "create pv failed!")
+
+​        return err
+
+​      }
+
+​      fmt.Printf("CreateNewpv success\n")
+
+​      fmt.Printf("newpv.DetailPhase.PVPhase: %+v\n", newpv.Status.Phase)
+
+​      //成功创建，更新status
+
+​      if modelVolume {
+
+​        pipeline.Status.DetailPhase.ModelStoragePhase.PVPhase = string(newpv.Status.Phase)
+
+
+
+​      } else {
+
+​        pipeline.Status.DetailPhase.ConfigStoragePhase.PVPhase = string(newpv.Status.Phase)
+
+​      }
+
+
+
+​    }
+
+  } else { //exist pv
+
+​    // 获取到了 PV 对象
+
+​    fmt.Printf("find PV success\n")
+
+​    fmt.Printf("PVStatus: %+v\n", pv.Status.Phase)
+
+​    //fmt.Printf("pc.DetailPhase.PVCPhase: %+v\n", pvc.Status.Phase)
+
+​    //更新status
+
+​    if modelVolume {
+
+​      pipeline.Status.DetailPhase.ModelStoragePhase.PVPhase = string(pv.Status.Phase)
+
+
+
+​    } else {
+
+​      pipeline.Status.DetailPhase.ConfigStoragePhase.PVPhase = string(pv.Status.Phase)
+
+
+
+​    }
+
+​    // pvStatus := &corev1.PersistentVolumeStatus{}
+
+​    // 判断 PV 的状态是否为 Released，是的话先删除再重建
+
+​    if pv.Status.Phase == corev1.VolumeReleased {
+
+​      fmt.Printf("pv.Status: Released!\n")
+
+​      if err := r.Delete(ctx, newpv, &client.DeleteOptions{}); err != nil {
+
+​        logger.Error(err, "Delete pv failed!")
+
+​        // fmt.Printf("Delete pv failed!\n")
+
+​        return err
+
+​      }
+
+
+
+​      if err := r.Create(ctx, newpv, &client.CreateOptions{}); err != nil {
+
+​        logger.Error(err, "create pv failed!")
+
+​        // fmt.Printf("create pv failed!\n")
+
+​        return err
+
+​      }
+
+​      fmt.Printf("newpv.Status.Phase: %+v\n", newpv.Status.Phase)
+
+​      //成功创建，更新status
+
+​      if modelVolume {
+
+​        pipeline.Status.DetailPhase.ModelStoragePhase.PVPhase = string(newpv.Status.Phase)
+
+
+
+​      } else {
+
+​        pipeline.Status.DetailPhase.ConfigStoragePhase.PVPhase = string(newpv.Status.Phase)
+
+​      }
+
+​    }
+
+
+
+  }
+
+  //存在pv，开始处理pvc
+
+  if err := r.Get(ctx, pvckey, pvc); err != nil { //pvc
+
+​    fmt.Printf("pvcIsNotFound\n")
+
+​    if k8serrors.IsNotFound(err) { //not found->create
+
+​      fmt.Printf("CreateNewpvc\n")
+
+​      if err := r.Create(ctx, newpvc, &client.CreateOptions{}); err != nil {
+
+​        logger.Error(err, "create pvc failed!")
+
+​        return err
+
+​      }
+
+​      fmt.Printf("newpvc.Status.Phase: %+v\n", newpvc.Status.Phase)
+
+​      //成功创建，更新status
+
+​      if modelVolume {
+
+​        pipeline.Status.DetailPhase.ModelStoragePhase.PVCPhase = string(newpvc.Status.Phase)
+
+​      } else {
+
+​        pipeline.Status.DetailPhase.ConfigStoragePhase.PVCPhase = string(newpvc.Status.Phase)
+
+​      }
+
+​    }
+
+  } else { //exist pv pvc
+
+​    fmt.Printf("find PVC success\n")
+
+
+
+​    //存在，更新status
+
+​    fmt.Printf("PVStatus: %+v\n", pv.Status.Phase)
+
+​    fmt.Printf("PVCStatus: %+v\n", pvc.Status.Phase)
+
+​    //更新status
+
+​    if modelVolume {
+
+​      pipeline.Status.DetailPhase.ModelStoragePhase.PVPhase = string(pv.Status.Phase)
+
+​      pipeline.Status.DetailPhase.ModelStoragePhase.PVCPhase = string(pvc.Status.Phase)
+
+​    } else {
+
+​      pipeline.Status.DetailPhase.ConfigStoragePhase.PVPhase = string(pv.Status.Phase)
+
+​      pipeline.Status.DetailPhase.ConfigStoragePhase.PVCPhase = string(pvc.Status.Phase)
+
+​    }
+
+
+
+  }
+
+  return nil
+
+}
+
+
+
 # 前置知识
 
 ## attach & mount
@@ -1060,16 +1312,16 @@ https://blog.csdn.net/fly910905/article/details/120974621
    >   mkdir /nfs_share
    >   chown nobody:nogroup /nfs_share/
    >   chmod 750 /nfs_share/
-   >           
+   >             
    >   #配置文件
    >   vi /etc/exports
-   >           
+   >             
    >   /nfs_share 192.168.20.236(rw,all_squash,sync) 
    >   #客户端所有用户在访问服务端都会以nobody用户访问，因此可以读写
-   >           
+   >             
    >   #配置文件生效
    >   exportfs -rav 
-   >           
+   >             
    >   #在192.168.20.236端mount
    >   sudo mount -t nfs 
    >   #查看
@@ -1078,7 +1330,7 @@ https://blog.csdn.net/fly910905/article/details/120974621
    >   total 8
    >   drwxr-x---  2 nobody nogroup 4096 Dec 20 15:01 ./
    >   drwxr-xr-x 12 aiedge aiedge  4096 Dec 19 14:48 ../
-   >           
+   >             
    >   ```
    >
    >   
