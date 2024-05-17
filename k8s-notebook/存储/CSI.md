@@ -315,13 +315,13 @@ https://kubernetes.io/zh-cn/docs/concepts/storage/persistent-volumes/
 
   集群管理员创建若干 PV 卷。这些卷对象**带有真实存储的细节信息**，并且对集群 用户可用（可见）。PV 卷对象存在于 Kubernetes API 中，可供用户消费（使用）
 
-  ![image-20231205204500437](img\pvc.png)
+  ![image-20231205204500437](img/pvc.png)
 
 - 动态制备
 
   **无须手工创建PV**，**基于 `StorageClass` 来实现的**：PVC 申领必须请求某个 `存储类`，同时集群管理员必须 已经创建并配置了该类，这样动态供应卷的动作才会发生。 **如果 PVC 指定存储类为 `""`，则相当于为自身禁止使用动态供应的卷（见csi-driver-nfs的部署步骤的静态方式）**。如下 StorageClass
 
-  ![image-20231205204612742](img\pvc1.png)
+  ![image-20231205204612742](img/pvc1.png)
 
 ### 支持的插件
 
@@ -329,7 +329,7 @@ PV 持久卷是用插件的形式来实现的。Kubernetes 目前支持以下插
 
 https://kubernetes.io/zh-cn/docs/concepts/storage/persistent-volumes/
 
-![image-20231220173854363](img\image-20231220173854363.png)
+![image-20231220173854363](img/image-20231220173854363.png)
 
 ### 字段说明
 
@@ -578,9 +578,9 @@ https://kubernetes.io/zh-cn/docs/reference/kubernetes-api/config-and-storage-res
 - 查找pv中满足 满足PVC中resources需求的
 - pv pvc的volumeMode满足要求
 
-<img src="img\bound.png" alt="image.png" style="zoom: 33%;" />
+<img src="img/bound.png" alt="image.png" style="zoom: 33%;" />
 
-![image-20231205203745762](img\pv.png)
+![image-20231205203745762](img/pv.png)
 
 
 
@@ -657,7 +657,7 @@ spec:
 
 ## 存储卷的生命周期
 
-![image-20231225212641271](img\image-20231225212641271.png)
+![image-20231225212641271](img/image-20231225212641271.png)
 
 ```text
 CreateVolume +------------+ DeleteVolume
@@ -728,7 +728,7 @@ CSI的目的：
 
 CSI：
 
-![CSI调用说明](img\csi1.png)
+![CSI调用说明](img/csi1.png)
 
 - **由k8s官方维护的一系列external组件**负责**注册CSI driver 或监听k8s对象资源，从而发起csi driver调用**，比如（node-driver-registrar，external-attacher，external-provisioner，external-resizer，external-snapshotter，livenessprobe）
 - **各云厂商or开发者自行开发的组件**（需要实现CSI Identity，CSI Controller，CSI Node 接口）
@@ -743,7 +743,7 @@ k8s官方提供：[csi-driver-nfs](https://github.com/kubernetes-csi/csi-driver-
 
 k8s的存储结构图：
 
-![在这里插入图片描述](img\k8s.png)
+![在这里插入图片描述](img/k8s.png)
 
 - PV Controller：负责 PV/PVC 的绑定，并根据需求进行数据卷的 Provision/Delete 操作
 - AD Controller：负责存储设备的 Attach/Detach 操作，将设备挂载到目标节点
@@ -752,9 +752,9 @@ k8s的存储结构图：
 
 在 Kubernetes 上整合 CSI 插件的整体架构如下图所示：
 
-![Recommended CSI Deployment Diagram](img\container-storage-interface_diagram1.png)
+![Recommended CSI Deployment Diagram](img/container-storage-interface_diagram1.png)
 
-![image-20231204093040999](img\csi)
+![image-20231204093040999](img/csi)
 
 CSI实现中的组件分为两部分：
 
@@ -844,7 +844,7 @@ CSI实现中的组件分为两部分：
 
 ## CSI的实际部署
 
-![img](img\csi-deploy.png)
+![img](img/csi-deploy.png)
 
 以nfs为例：<见部署yaml>
 
@@ -866,13 +866,13 @@ spec:
 
 ```
 
-![image-20231220100556710](img\image-20231220100556710.png)
+![image-20231220100556710](img/image-20231220100556710.png)
 
-![image-20231220100638214](img\image-20231220100638214.png)
+![image-20231220100638214](img/image-20231220100638214.png)
 
 ### Controller Pod和Node Pod
 
-![image-20231219204425911](img\image-20231219204425911.png)
+![image-20231219204425911](img/image-20231219204425911.png)
 
 
 
@@ -885,7 +885,7 @@ CSINode 用于将 CSI 驱动程序绑定到节点上，表示节点上的 CSI �
 - CSINode 对象用于告知 Kubernetes 集群该节点上可用的 CSI 驱动程序，以便在调度 Pod 时进行选择和匹配；
 - CSINode 对象是节点级别的，每个节点上都需要创建一个对应的 CSINode 对象；
 
-![image-20231205141632108](img\nfs3.png)
+![image-20231205141632108](img/nfs3.png)
 
 
 
@@ -899,7 +899,7 @@ CSINode 用于将 CSI 驱动程序绑定到节点上，表示节点上的 CSI �
 
 #### Provision（创盘/删盘）
 
-![img](img\Provision.png)
+![img](img/Provision.png)
 
 先来看 Provision 阶段，整个过程如上图所示。其中 extenal-provisioner 和 PVController 均 watch PVC 资源。
 
@@ -910,13 +910,13 @@ CSINode 用于将 CSI 驱动程序绑定到节点上，表示节点上的 CSI �
 3. 当 CSI Controller 的 `CreateVolume` 接口返回成功时，extenal-provisioner 会在集群中创建对应的 PV；
 4. PVController watch 到集群中有 PV 创建时，将 PV 与 PVC 进行绑定。
 
-![image-20231226091540652](img\create.png)
+![image-20231226091540652](img/create.png)
 
 
 
 #### Attach（挂接/摘除）
 
-![img](img\Attach.png)
+![img](img/Attach.png)
 
 Attach 阶段是指将 volume 挂接到节点上（**将存储 attach到 pod 将会运行的 node 上面**），整个过程如上图所示。
 
@@ -925,13 +925,13 @@ Attach 阶段是指将 volume 挂接到节点上（**将存储 attach到 pod 将
 3. 当 CSI Controller 的 `ControllerPublishVolume` 接口调用成功后，external-attacher 将对应的 VolumeAttachment 对象的 Attached 状态设为 true；
 4. ADController watch 到 VolumeAttachment 对象的 Attached 状态为 true 时，更新 ADController 内部的状态 ActualStateOfWorld。
 
-![image-20231226091931765](img\attach)
+![image-20231226091931765](img/attach)
 
-![image-20231226092051276](img\attach1)
+![image-20231226092051276](img/attach1)
 
 #### Mount（挂载/卸载）
 
-![img](img\Mount.png)
+![img](img/Mount.png)
 
 将 volume 挂载到 pod 里的过程涉及到 kubelet。整个流程简单地说是，**对应节点上的 kubelet 在创建 pod 的过程中，会调用 CSI Node 插件，执行 mount 操作**。
 
@@ -942,7 +942,7 @@ kubelet中的volume manager调用csi plugin的NodeStageVolume、NodePublishVolum
 >    aiedge@xx-test-node239:~$ sudo ls /var/lib/kubelet/pods/65c1da18-33ce-4896-8ca1-0adc39356478/volumes
 >    kubernetes.io~csi  kubernetes.io~projected
 >
->    ![image-20231222142224232](img\image-20231222142224232.png)
+>    ![image-20231222142224232](img/image-20231222142224232.png)
 >
 > 2. kubelet在被告知挂载目录准备好后，启动Pod中的containers，用Docker -v方式（bind）将已经挂载到本地的卷映射到容器中；
 
@@ -950,7 +950,7 @@ kubelet中的volume manager调用csi plugin的NodeStageVolume、NodePublishVolum
 
 #### 总体流程
 
-![image-20231205164247026](img\csi0.png)
+![image-20231205164247026](img/csi0.png)
 
 调度流程
 
@@ -1124,7 +1124,7 @@ cd csi-driver-nfs
 ./deploy/install-driver.sh v4.1.0 local #表示用本地yaml部署
 ```
 
-![image-20231205100459824](img\nfs1.png)
+![image-20231205100459824](img/nfs1.png)
 
 实际上，最主要的几个部署yaml：
 
@@ -1145,11 +1145,11 @@ kube-system    csi-nfs-node-rcwqs                          0/3     ContainerCrea
 
 ```
 
-![image-20231205141314142](img\nfs2.png)
+![image-20231205141314142](img/nfs2.png)
 
 查看csinode信息：
 
-![image-20231205141632108](img\nfs3.png)
+![image-20231205141632108](img/nfs3.png)
 
 > csi驱动的名称：nfs.csi.k8s.io
 
@@ -1187,7 +1187,7 @@ spec:
 
 ```
 
-![image-20231205144530818](img\nfs4.png)
+![image-20231205144530818](img/nfs4.png)
 
 ======
 
@@ -1278,13 +1278,13 @@ spec:
  df -h
 ```
 
-![image-20231205152630863](img\nfs5.png)
+![image-20231205152630863](img/nfs5.png)
 
 在NFS 服务器上`/home/aiedge/csiTest/pvc-628f3e62-0529-404e-9cff-077d59eb2b79/`新增文件test1.txt
 
 在pod中查看：
 
-![image-20231205152745204](img\nfs6.png)
+![image-20231205152745204](img/nfs6.png)
 
 ### 删除：
 
