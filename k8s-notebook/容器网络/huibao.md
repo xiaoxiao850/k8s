@@ -115,8 +115,8 @@ sudo ip link set Tbr0 up
 因此需要修改规则
 - 将bridge设置为“容器”的缺省网关：
 ```bash
-sudo ip netns exec docker0 route add default gw 172.18.0.1 veth0
-sudo ip netns exec docker1 route add default gw 172.18.0.1 veth2
+sudo ip netns exec Tdocker0 route add default gw 172.18.0.1 Tveth0
+sudo ip netns exec Tdocker1 route add default gw 172.18.0.1 Tveth2
 ```
 查看“容器”内的路由表：
 ![alt text](image-22.png)
