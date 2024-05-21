@@ -32,7 +32,11 @@ https://kubernetes.io/zh-cn/docs/concepts/storage/volumes/
 
  [临时卷](https://kubernetes.io/zh-cn/docs/concepts/storage/ephemeral-volumes/)类型的生命周期与 Pod 相同， 但[持久卷](https://kubernetes.io/zh-cn/docs/concepts/storage/persistent-volumes/)可以比 Pod 的存活期长。**当Pod不存在的时候，K8S也会销毁临时卷，不会销毁持久卷。**在容器重启期间，Pod中任何类型的卷都不会丢失
 
-临时卷：emptyDir、configMap、 downwardAPI、 secret 作为 本地临时存储 提供的。它们由各个节点上的 kubelet 管理。
+卷的核心是一个目录，其中可能存有数据，Pod 中的容器可以访问该目录中的数据。 **所采用的特定的卷类型将决定该目录如何形成的、使用何种介质保存数据以及目录中存放的内容**。
+**容器中的进程看到的文件系统视图是由它们的容器镜像 的初始内容以及挂载在容器中的卷（如果定义了的话）所组成的**。
+
+**临时卷**：有些应用程序需要额外的存储，但并不关心数据在重启后是否仍然可用。 应用程序需要以文件形式注入的只读数据，比如配置数据或密钥。
+Kubernetes 支持的临时卷：emptyDir、configMap、 downwardAPI（将pod和容器字段值暴露给容器中运行的代码）、 secret 作为 本地临时存储 提供的。它们由各个节点上的 kubelet 管理。
 
 卷不能挂载到其他卷之上（不过存在一种[使用 subPath](https://kubernetes.io/zh-cn/docs/concepts/storage/volumes/#using-subpath) 的相关机制）
 
@@ -164,7 +168,7 @@ k8s中的volume还支持容器配置文件集中化定义和管理 configmap资�
 
    
 
-4. **configMap   **
+4. **configMap**
 
    **configMap**  提供了向 Pod 注入配置数据的方法。`ConfigMap`对象中存储的数据可以被解析，然后被`Pod`中运行的容器化应用使用。
 
@@ -195,7 +199,7 @@ k8s中的volume还支持容器配置文件集中化定义和管理 configmap资�
 
    
 
-5. **secret ** 
+5. **secret** 
 
    **secret** 卷用来给 Pod 传递敏感信息，例如密码。你可以将 Secret 存储在 Kubernetes API 服务器上，然后以文件的形式挂载到 Pod 中，无需直接与 Kubernetes 耦合。 `secret` 卷由 tmpfs（基于 RAM 的文件系统）提供存储，因此它们永远不会被写入非易失性（持久化的）存储器。
 
