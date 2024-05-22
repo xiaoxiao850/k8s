@@ -175,6 +175,8 @@ spec:
 
 ```
 
+讲的内容：PV的两种制备方式， PV PVC 的绑定，CSI的架构，项目中NFS-CSI的部署
+
 ---
 
 ## volume
