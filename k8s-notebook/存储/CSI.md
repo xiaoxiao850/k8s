@@ -23,6 +23,159 @@
    > Mount 这一步，由kubelet中的`VolumeManagerReconciler`这个控制循环负责，它是一个独立于kubelet主循环的goroutine。
 
    
+## 一些概念梳理
+### volume
+卷的核心是一个目录，其中可能存有数据，Pod 中的容器可以访问该目录中的数据。 **所采用的特定的卷类型将决定该目录如何形成的、使用何种介质保存数据以及目录中存放的内容**。
+**容器中的进程看到的文件系统视图是由它们的容器镜像 的初始内容以及挂载在容器中的卷（如果定义了的话）所组成的**。
+
+### 临时卷和持久卷
+**临时卷**：有些应用程序需要额外的存储，但并不关心数据在重启后是否仍然可用。**卷的生命周期和pod生命周期相同**。 应用程序需要以文件形式注入的只读数据，比如配置数据或密钥。
+Kubernetes 支持的临时卷：emptyDir、configMap、 downwardAPI（将pod和容器字段值暴露给容器中运行的代码）、 secret 作为 本地临时存储 提供的。它们由各个节点上的 kubelet 管理。
+**持久卷**：意味着这个目录里面的内容不会因为容器被删除而清除，这样当POD重建以后或者在其他主机节点上启动后依然可以访问这些内容。
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pd
+spec:
+  containers:
+  - image: nginx
+    name: test-container
+    volumeMounts:
+    - mountPath: /my-nfs-data
+      name: pv-nfs
+  volumes:
+  - name: pv-nfs
+    capacity:
+      storage: 10Gi
+    nfs:
+      server: 192.168.20.235
+      path: /home/aiedge/csiTest
+```
+### 引入PV PVC的原因
+在没引入PV PVC时，如上yaml这种方式存在问题：
+- Pod声明与底层存储耦合在一起，每次声明Volume都需要配置存储类型以及该存储插件的一堆配置。
+- 各个Pod都可以任意的向存储资源里（比如NFS）写数据，随便一个Pod都可以往磁盘上插一杠子，长期下去磁盘的管理会越来越混乱
+
+ k8s PVcontroller 为用户和管理员提供了一组 API， 将存储如何制备的细节从其如何被使用中抽象出来。 为了实现这点，我们引入了两个新的 API 资源：PV 和 PVC。
+- **PV**：PersistentVolume，集群级别的资源。是集群中的一块存储，拥有独立于任何使用 PV 的 Pod 的生命周期
+- **PVC**：PersistentVolumeClaim，命名空间（namespace）级别的资源。表达的是**用户对存储的请求**，请求特定的大小和访问模式。
+
+PV其实就是把Volume的配置声明部分从Pod中分离出来，PV的spec部分几乎和前面Pod的Volume定义部分是一样的，由运维人员事先创建在 Kubernetes 集群里待用
+
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-nfs
+spec:
+  capacity:
+    storage: 10Gi 
+  nfs:
+    path: /home/aiedge/csiTest
+    server: 192.168.20.235
+```
+
+有了PV，在Pod中就可以不用再定义Volume的配置了，直接引用即可。但是存储系统通常由运维人员管理，开发人员并不知道底层存储配置，也就很难去定义好PV。为了解决这个问题，引入了PVC（Persistent Volume Claim），声明与消费分离，开发与运维责任分离。
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: nfs-csi
+```
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pd
+spec:
+  containers:
+  - image: registry.k8s.io/test-webserver
+    name: test-container
+    volumeMounts:
+    - mountPath: /my-nfs-data
+      name: test-volume
+  volumes:
+  - name: test-volume
+    persistentVolumeClaim:
+        claimName: nfs-pvc
+```
+运维人员负责存储管理，可以事先根据存储配置定义好PV，而开发人员无需了解底层存储配置，只需要**通过PVC声明需要的存储类型、大小、访问模式等需求**即可，然后就可以在Pod中引用PVC，完全不用关心底层存储细节。
+这个PVC就会和上面的PV进行绑定，绑定原则可以看下面。
+
+### Storage Classes
+一个大规模的 Kubernetes 集群里很可能有成千上万个 PVC，这就意味着运维人员必须得事先创建出成千上万个 PV。更麻烦的是，随着新的 PVC 不断被提交，运维人员就不得不继续添加新的、能满足条件的 PV，否则新的 Pod 就会因为 PVC 绑定不到 PV 而失败。
+
+所以，Kubernetes 为我们提供了一套可以自动创建 PV 的机制，即：`Dynamic Provisioning`。 StorageClass 对象的作用，其实就是创建 PV 的模板。
+运维人员创建出StorageClass，开发人员提交了包含 StorageClass 字段的 PVC 之后，Kubernetes 就会根据这个 StorageClass 创建出对应的 PV。
+
+> Kubernetes 的官方文档里已经列出了默认支持 Dynamic Provisioning 的内置存储插件。而对于不在文档里的插件，比如 NFS，或者其他非内置存储插件，可以通过CSI的方式。
+
+```yaml
+# StorageClass
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: slow
+provisioner: kubernetes.io/aws-ebs # kubernetes内置的存储插件名称，aws-ebs是一种高性能数据块存储服务
+parameters:
+  type: io1
+  iopsPerGB: "10"
+  fsType: ext4
+---
+# PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: slow-pvc
+spec:
+  storageClassName: slow
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+```
+
+### CSI
+为了实现存储与 K8s 代码的解耦 以及对接任意存储系统 提出了CSI，使得 out-of-tree 的第三方 CSI 驱动能够被 Kubernetes 使用。
+
+CSI(Container Storage Interface) 是由来自 Kubernetes、Mesos、Docker 等社区 member 联合制定的一个行业标准接口规范(https://github.com/container-storage-interface/spec)，旨在将任意存储系统暴露给容器化应用程序。
+可以动态 可以静态制备PV：
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-csi
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: 192.168.20.235
+  share: /home/aiedge/csiTest
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: nfs-csi
+
+```
+
+---
 
 ## volume
 
@@ -307,7 +460,7 @@ containers:
 
 https://kubernetes.io/zh-cn/docs/concepts/storage/persistent-volumes/
 
-<u>将存储如何供应的细节从其如何被使用中抽象出来</u>。为了实现这点，我们引入了两个新的 API 资源：`PersistentVolume` 和 `PersistentVolumeClaim`。
+
 
 **持久卷（PersistentVolume，PV）** 是集群中的一块存储，**可以由管理员事先制备， 或者使用[存储类（Storage Class）](https://kubernetes.io/zh-cn/docs/concepts/storage/storage-classes/)来动态制备**。 持久卷是集群资源，而不是像volume定义在pod上。
 
