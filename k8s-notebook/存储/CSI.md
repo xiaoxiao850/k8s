@@ -145,7 +145,7 @@ spec:
 ```
 
 ### CSI
-为了实现存储与 K8s 代码的解耦 以及对接任意存储系统 提出了CSI，使得 out-of-tree 的第三方 CSI 驱动能够被 Kubernetes 使用。
+为了实现存储与 K8s 代码的解耦 以及对接任意存储系统 提出了CSI，使得 out-of-tree 的第三方 CSI 驱动能够被 Kubernetes 使用。同时便于各大云厂商根据业务需求实现相关的接口，提供个性化的云存储能力，以期达到云存储生态圈的开放共赢。
 
 CSI(Container Storage Interface) 是由来自 Kubernetes、Mesos、Docker 等社区 member 联合制定的一个行业标准接口规范(https://github.com/container-storage-interface/spec)，旨在将任意存储系统暴露给容器化应用程序。
 可以动态 可以静态制备PV：
