@@ -163,13 +163,144 @@ https://github.com/kubernetes/apimachinery
 - 版本转换
 - ...
 
-## Owners and Dependents
+## 资源回收
 
+Deployment, Job, DaemonSet等资源, 在删除时候, 其相关的Pod都会被删除, 这种机制就是kubernetes的[垃圾收集器](https://kubernetes.io/zh/docs/concepts/workloads/controllers/garbage-collection/).
+
+### 删除策略
+在默认情况下，删除一个对象同时会删除它的附属对象：
+1. 级联删除
+  - Foreground 模式
+  - Background 模式
+2. 非级联删除
+  - Orphan 模式
+
+#### 1. 级联删除
+- **Foreground 前台策略**：**先删除附属对象，再删除属主对象**。在 Foreground 模式下，待删除对象首先进入 deletion in progress 状态。 在此状态下存在如下的场景：
+  - 对象仍然可以通过 REST API 获取。
+  - 会将对象的 `deletionTimestamp` 字段设置为对象被标记为要删除的时间点。
+  - 将对象的 `metadata.finalizers` 字段值设置为 `foregroundDeletion`。对象一旦被设置为 d`eletion in progress` 状态时，gc会删除对象的所有附属， **垃圾收集器在删除了所有有阻塞能力的附属对象之后（ ownerReference.blockOwnerDeletion=true），再删除属主对象**。
+
+- **Background 后台策略（默认）**：**立即先删除属主对象，再删除附属对象**。 在 Background 模式下，Kubernetes 会立即删除属主对象，之后垃圾收集器会在后台删除其附属对象。
+
+#### 2. 非级联删除
+**Orphan 策略**：不会自动删除它的附属对象，这些残留的依赖被称作是原对象的孤儿对象。
+
+### Finalizers
+
+**Finalizer 能够让控制器实现异步的删除前（Pre-delete）回调 （做一些删除相关的工作）**。 与内置对象类似，定制对象也支持 Finalizer。
+
+Finalizer 列表是通过在资源对象的 metadata.finalizers 字段中指定的一组字符串来实现的。当资源对象被标记为要删除时，Kubernetes 会在 Finalizer 列表中添加 Finalizers。一旦所有 Finalizers 都执行完毕，Kubernetes 就会删除该对象。如下：
+```yaml
+apiVersion: "example.com/v1"
+kind: Demo
+metadata:
+  name: crd-demo
+  finalizers:
+  - example.com/finalizer
+spec:
+  name: test
+```
+
+#### DeletionTimestamp 
+时间戳，用于标记资源对象的删除时间。当资源对象被标记为要删除时，Kubernetes 会在 DeletionTimestamp 字段中设置一个时间戳。一旦资源对象被标记为要删除，就无法再对它进行修改或更新。
+
+#### 删除过程
+当删除一个对象时，其对应的控制器并不会真正执行删除对象的操作，GC会根据指定的删除策略回收该对象及其依赖对象：
+- 发出删除命令后 Kubernetes 会将该对象**标记为待删除**，但不会真的删除对象，具体做法是将对象的 `metadata.deletionTimestamp` 字段**设置为当前时间戳**，这使得对象处于只读状态（除了修改 finalizers 字段），并在 **`Finalizer` 列表中添加 Finalizers**。
+- 当 `metadata.deletionTimestamp` 字段非空时，表示进入删除流程，**当检测到对象上有finalizers标签， 删除流程会被挂起**。
+- 负责监视该对象的各个控制器会执行对应的 Finalizer 动作，每个 Finalizer 动作完成后，就会从 Finalizers 列表中删除对应的 Finalizer。
+- 一旦 **Finalizers 列表为空时**，就意味着所有 Finalizer 都被执行过了，垃圾收集器**会最终删除该对象**。并将 `DeletionTimestamp` 字段设置为 `null`。
+
+下面是一个示例 Controller 的 reconcile 过程，演示了 Finalizer 和 DeletionTimestamp 的用法：
+```go
+func (c *Controller) reconcile(ctx context.Context, deployment *appsv1.Deployment) error {
+	// Check if the object is being deleted
+	if !deployment.ObjectMeta.DeletionTimestamp.IsZero() {//不为零：这表示资源已被标记为删除，否则正常运行
+		// The object is being deleted
+		if containsString(deployment.ObjectMeta.Finalizers, myFinalizerName) {//检查 Finalizers 列表中是否包含 myFinalizerName。
+			// Run finalization logic
+			if err := c.finalizeDeployment(ctx, deployment); err != nil {
+				return err
+			}
+      //上述删除前的操作执行成功之后，
+			// Remove the finalizer移除 Finalizers 列表中的 myFinalizerName。
+			deployment.ObjectMeta.Finalizers = removeString(deployment.ObjectMeta.Finalizers, myFinalizerName)
+      //更新 deployment 对象以反映 Finalizers 列表的变化
+			if _, err := c.kubeClient.AppsV1().Deployments(deployment.Namespace).Update(ctx, deployment, metav1.UpdateOptions{}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+ 
+  //正常运行 没被标记删除
+  //如果 Finalizers 列表中不包含 myFinalizerName，则将其添加到列表中
+	// The object is not being deleted
+	if !containsString(deployment.ObjectMeta.Finalizers, myFinalizerName) {
+		// Add finalizer
+		deployment.ObjectMeta.Finalizers = append(deployment.ObjectMeta.Finalizers, myFinalizerName)
+		if _, err := c.kubeClient.AppsV1().Deployments(deployment.Namespace).Update(ctx, deployment, metav1.UpdateOptions{}); err != nil {
+			return err
+		}
+	}
+ 
+	// Handle normal reconcile logic here
+	// ...
+}
+ 
+ //执行删除前的一些逻辑，比如删除相关的 ConfigMaps
+func (c *Controller) finalizeDeployment(ctx context.Context, deployment *appsv1.Deployment) error {
+	// Perform finalization logic, such as deleting related ConfigMaps
+	// ...
+	return nil
+}
+ 
+func containsString(strs []string, str string) bool {
+	for _, s := range strs {
+		if s == str {
+			return true
+		}
+	}
+	return false
+}
+ 
+func removeString(strs []string, str string) []string {
+	newStrs := []string{}
+	for _, s := range strs {
+		if s != str {
+			newStrs = append(newStrs, s)
+		}
+	}
+	return newStrs
+}
+```
+当 Deployment 资源对象被标记为要删除时，reconcile 函数会检查 Deployment 资源对象的 Finalizer 列表中是否包含 my-finalizer Finalizer。如果包含，则运行 finalizeDeployment 函数中的清理逻辑。完成清理逻辑后，将从 Finalizer 列表中删除 my-finalizer Finalizer。最后，使用 Kubernetes API 更新 Deployment 资源对象，以确保 Finalizer 列表正确更新。
+
+如果 Deployment 资源对象被标记为要删除，但 Finalizer 列表中没有包含 my-finalizer Finalizer，reconcile 函数会将 my-finalizer Finalizer 添加到 Finalizer 列表中，以确保清理逻辑被正确执行。
+
+#### Finalizers 在 Kubernetes 中的使用场景
+1. Pod挂载PV PVC
+如果用户删除被某 Pod 使用的 PVC 对象，该 PVC 申领不会被立即移除，PVC 对象的移除会被推迟，直至其不再被任何 Pod 使用。 
+如果删除已绑定到某 PVC 申领的 PV 卷，该 PV 卷也不会被立即移除，PV 对象的移除也要推迟到该 PV 不再绑定到 PVC。
+![alt text](image-1.png)
+PVC和PV分别原生自带kubernetes.io/pvc-protection和kubernetes.io/pv-protection的finalizers标签的，其目的在于保护持久化存储不被误删，避免挂载了存储的工作负载产生问题。
+PV被标记删除`.DeletionTimestamp.IsZero`时，如果包含`kubernetes.io/pv-protection`的finalizers标签，列出挂载pv的pods。待该 PVC 上的所有 Pod 被删除。如果数量为0，此时删除这个finalizers标签，删除pv。
+
+2. ownerReference
+删除pipeline属主对象，控制器必须在删除了拥有 ownerReferences.blockOwnerDeletion=true 的附属资源后，才能删除属主对象。
+![alt text](image.png)
+也就是说，项目中删除pipeline属主对象，必须先删除附属资源对象deployments svc等
+
+### Owners and Dependents
+属主与附属
 在 Kubernetes 中，一些[对象](https://kubernetes.io/zh-cn/docs/concepts/overview/working-with-objects/#kubernetes-objects)是其他对象的“属主（Owner）”。 例如，[ReplicaSet](https://kubernetes.io/zh-cn/docs/concepts/workloads/controllers/replicaset/) 是一组 Pod 的属主。 具有属主的对象是属主的“附属（Dependent）”。
 
 附属对象有一个 `metadata.ownerReferences` 字段，用于引用其属主对象。一个有效的属主引用， 包含与附属对象同在一个[命名空间](https://kubernetes.io/zh-cn/docs/concepts/overview/working-with-objects/namespaces/)下的对象名称和一个 [UID](https://kubernetes.io/zh-cn/docs/concepts/overview/working-with-objects/names/)。
 
 附属对象还有一个 `ownerReferences.blockOwnerDeletion` 字段，该字段使用布尔值， 用于控制特定的附属对象是否可以阻止垃圾收集删除其属主对象。（即在删除引用之前无法删除所有者）
+
+当添加了Owner Reference之后，删除子级对象并不会把父级对象也删除掉，但删除掉父级对象会把子级对象一并删除掉。
 
 ![image-20240112163813983](img\image-20240112163813983.png)
 
@@ -187,25 +318,14 @@ https://github.com/kubernetes/apimachinery
 >
 > 如果垃圾收集器检测到无效的跨名字空间的属主引用， 或者一个集群范围的附属指定了一个名字空间范围类型的属主， 那么它就会报告一个警告事件。该事件的原因是 `OwnerRefInvalidNamespace`， `involvedObject` 属性中包含无效的附属。 你可以运行 `kubectl get events -A --field-selector=reason=OwnerRefInvalidNamespace` 来获取该类型的事件。
 
-## 资源回收
+可以通过`controllerutil.SetOwnerReference`设置附属关系
 
-Deployment, Job, DaemonSet等资源, 在删除时候, 其相关的Pod都会被删除, 这种机制就是kubernetes的[垃圾收集器](https://kubernetes.io/zh/docs/concepts/workloads/controllers/garbage-collection/).
+#### 项目中的资源关系设置
 
-但是Kubernetes的垃圾收集器仅能删除Kubernetes API的资源。Kubernetes对于删除级联资源提供了2种模式：
+项目中使用`controllerutil.SetControllerReference(pipeline, &newService, r.Scheme)`设置pipeline的附属资源。也就是设置deployment等资源对象的 ownerReference 字段被一个控制器(pipeline)设置
+两者区别：使用`SetControllerReference`，其`blockOwnerDeletion` 也会被自动设置，不需要手动修改。
 
-- Background:在这模式下，Kubernetes会直接删除属主资源，然后再由垃圾收集器在后台删除相关的API资源
-- Foreground:在这模式下，Owner资源会透过设定`metadta.deletionTimestamp`字段来表示"正在删除中"。这时Owner资源依然存在于集群中，并且能透过REST API查看到相关信息。该资源被删除条件是当移除了`metadata.finalizers`字段后，才会真正的从集群中移除。这样机制形成了预删除挂钩（Pre-delete hook），因此我们能在正在删除的期间，开始回收相关的资源（如虚拟机或其他Kubernetes API资源等等），当回收完后，再将该资源删除。
-
-### Finalizer
-
-可以在`controller.go`里面加入Finalizers机制来确保资源被正确删除, 做法也比较简单, 只需要在对应的创建函数中对其对应的资源设置`metadata.finalizers`即可
-
-```go
-func controllerutil.AddFinalizer(o client.Object, finalizer string) (finalizersUpdated bool)
-//AddFinalizer accepts an Object and adds the provided finalizer if not present.
-```
-
-
+当所有者对象pipeline被删除时，附属对象也会被删除。
 
 # Client-go
 
@@ -971,23 +1091,6 @@ spec:
 status: 
   phase: failed
   
-```
-
-
-
-### Finalizers
-
-**Finalizer 能够让控制器实现异步的删除前（Pre-delete）回调 （做一些删除相关的工作）**。 与内置对象类似，定制对象也支持 Finalizer
-
-```yaml
-apiVersion: "example.com/v1"
-kind: Demo
-metadata:
-  name: crd-demo
-  finalizers:
-  - example.com/finalizer
-spec:
-  name: test
 ```
 
 ## 一些代码生成工具

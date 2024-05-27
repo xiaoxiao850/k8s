@@ -32,6 +32,7 @@
 **临时卷**：有些应用程序需要额外的存储，但并不关心数据在重启后是否仍然可用。**卷的生命周期和pod生命周期相同**。 应用程序需要以文件形式注入的只读数据，比如配置数据或密钥。
 Kubernetes 支持的临时卷：emptyDir、configMap、 downwardAPI（将pod和容器字段值暴露给容器中运行的代码）、 secret 作为 本地临时存储 提供的。它们由各个节点上的 kubelet 管理。
 **持久卷**：意味着这个目录里面的内容不会因为容器被删除而清除，这样当POD重建以后或者在其他主机节点上启动后依然可以访问这些内容。
+
 ```yaml
 apiVersion: v1
 kind: Pod
@@ -55,7 +56,6 @@ spec:
 ### 引入PV PVC的原因
 在没引入PV PVC时，如上yaml这种方式存在问题：
 - Pod声明与底层存储耦合在一起，每次声明Volume都需要配置存储类型以及该存储插件的一堆配置。
-- 各个Pod都可以任意的向存储资源里（比如NFS）写数据，随便一个Pod都可以往磁盘上插一杠子，长期下去磁盘的管理会越来越混乱
 
  k8s PVcontroller 为用户和管理员提供了一组 API， 将存储如何制备的细节从其如何被使用中抽象出来。 为了实现这点，我们引入了两个新的 API 资源：PV 和 PVC。
 - **PV**：PersistentVolume，集群级别的资源。是集群中的一块存储，拥有独立于任何使用 PV 的 Pod 的生命周期
@@ -67,7 +67,7 @@ PV其实就是把Volume的配置声明部分从Pod中分离出来，PV的spec部
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: pv-nfs
+  name: pv-nfs-static
 spec:
   capacity:
     storage: 10Gi 
@@ -88,7 +88,7 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: nfs-csi
+    volumeName: pv-nfs-static
 ```
 ```yaml
 apiVersion: v1
@@ -158,8 +158,8 @@ provisioner: nfs.csi.k8s.io
 parameters:
   server: 192.168.20.235
   share: /home/aiedge/csiTest
-reclaimPolicy: Delete
-volumeBindingMode: Immediate
+reclaimPolicy: Delete #PVC被删除时，PV也会被删除，同时也会从外部基础设施中移除所关联的存储资产
+volumeBindingMode: Immediate 
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -175,10 +175,13 @@ spec:
 
 ```
 
-讲的内容：PV的两种制备方式， PV PVC 的绑定，CSI的架构，项目中NFS-CSI的部署
-
+## 讲的内容：
+* [1.PV PVC 的绑定](#first_link)
+* [2.CSI的架构](#second_link)
+* [3.项目中NFS-CSI的部署](#1.7)
 ---
 
+# volume
 ## volume
 
 https://kubernetes.io/zh-cn/docs/concepts/storage/volumes/
@@ -400,7 +403,7 @@ k8s中的volume还支持容器配置文件集中化定义和管理 configmap资�
 
    
 
-7. ## persistentVolumeClaim
+7. persistentVolumeClaim
 
    ```bash
       volumes:
@@ -468,7 +471,7 @@ https://kubernetes.io/zh-cn/docs/concepts/storage/persistent-volumes/
 
  **和普通volumen一样也是使用卷插件来实现的，只是它们拥有独立于任何使用 PV 的 Pod 的生命周期。** **支持插件**：csi、hostPath、nfs、local
 
-### **制备方式**：静态制备或动态制备
+### 制备方式：静态制备或动态制备
 
 - 静态制备
 
@@ -523,13 +526,13 @@ volumeMode 定义一个卷是带着已格式化的文件系统来使用还是保
 
 定义当从PVC释放PV时会发生什么。 有效的选项为 Retain（保留 PV 的数据。）、 Delete（立即删除 PV 的数据。）和 Recycle（使 PV 重新变为"空闲"状态等待下一次绑定。已弃用）。 只有NFS和HostPath支持Recycle策略
 
-- #### 保留（Retain）
+- **保留（Retain）**
 
   手动创建 PersistentVolumes 所用的默认值。回收策略Retain使得用户可以手动回收资源，**当PVC被删除的时候，PV仍然存在，对应的数据卷会被视为Released**，卷仍属于当前用户，不会被其他PVC使用，只能被用户手动回收
 
   **删除PV后，此PV的数据依然留存于外部的存储中**。手工清理存储系统上依然留存的数据，可以再次创建、或者直接将其重新创建为PV
 
-- #### 删除（Delete）
+- **删除（Delete）**
 
   动态制备 PersistentVolumes 所用的默认值。对于支持Delete的卷插件，**在PVC被删除后会直接移除PV对象、同时移除的还有PV相关的外部存储系统上的存储资产**(asset)、支持这种操作的存储系统有AWS EBS、GCE PD、Azure Disk或Cinder。
 
@@ -721,7 +724,8 @@ https://kubernetes.io/zh-cn/docs/reference/kubernetes-api/config-and-storage-res
 
 
 
-## 绑定PersistentVolume  & persistentVolumeClaim
+## 绑定PV  & PVC 
+[](#first_link)
 
 > - PersistentVolume（PV）：对存储资源创建和使用的抽象，使得存储作为集群中的资源管理
 > - PersistentVolumeClaim（PVC）：让用户不需要关心具体的Volume实现细节
@@ -851,6 +855,7 @@ STAGE_UNSTAGE_VOLUME capability.
 **创建卷**-**挂接到节点**-**预处理卷**-**挂载到Pod**
 
 # CSI
+[跳转](#second_link)
 
 > 参考链接：
 >
@@ -1052,7 +1057,7 @@ CSINode 用于将 CSI 驱动程序绑定到节点上，表示节点上的 CSI �
 
 ### pod 挂载 volume 
 
-**pod 挂载 volume 的整个工作流程**：整个流程流程分别三个阶段：**Provision/Delete、Attach/Detach、Mount/Unmount，**不过不是每个存储方案都会经历这三个阶段，比如 NFS 就没有 Attach/Detach 阶段。
+**pod 挂载 volume 的整个工作流程**：整个流程流程分别三个阶段：**Provision/Delete、Attach/Detach、Mount/Unmount**不过不是每个存储方案都会经历这三个阶段，比如 NFS 就没有 Attach/Detach 阶段。
 
 整个过程不仅仅涉及到上面介绍的组件的工作，还涉及 ControllerManager 的 AttachDetachController 组件和 PVController 组件以及 kubelet。
 
@@ -1111,17 +1116,30 @@ kubelet中的volume manager调用csi plugin的NodeStageVolume、NodePublishVolum
 
 ![image-20231205164247026](img/csi0.png)
 
-调度流程
+**调度流程**
+1. apiserver 创建 Pod，PVC字段申明挂卷
+2. 然后就是正常的调度
+3. 选择好node后，对应的pvc添加annotation:volume.kubernetes.io/selected-node
 
-- 创建pod，使用pvc，然后就是正常的调度，选择好node后，对应的pvc添加annotation:volume.kubernetes.io/selected-node
+**provision流程**
 
-provision流程
+4. PVController 监听到 PV informer，添加相关 Annotation(如 pv.kubernetes.io/provisioned-by)，调谐实现 PVC/PV 的绑定(Bound)；【动态绑定 则跳过此步骤】
+5. external-provisioner 监听到 PVC informer
+6. external-provisioner调用 RPC-CreateVolume，CSI插件 创建 存储卷；
+7. 创建PV对象
+8. 绑定PV PVC
+9. 绑定pod和node
 
-attach流程
+**attach流程**
 
-mount流程
+10. AttachDetachController watch到PV
+11. 将已经绑定(Bound) 成功的 PVC/PV，经过 InTreeToCSITranslator 转换器，由 CSIPlugin 内部逻辑实现 VolumeAttachment 资源类型的创建；
+12. external-attacher 监听到 VolumeAttachment informer，
+13. 调用 RPC-ControllerPublishVolume 实现 AttachVolume；将存储卷挂接到节点
 
-
+**mount流程**
+14. kubelet reconcile 持续调谐：通过判断 controllerAttachDetachEnabled || PluginIsAttachable 及当前 Volume 状态进行 AttachVolume/MountVolume，最终实现将 Volume 挂载到 Pod 指定目录中，供 Container 使用；
+15. apiserver 创建 Pod，根据 PodSpec.Volumes 创建 Volume；
 
 ## csi-driver-host-path部署
 
@@ -1208,7 +1226,7 @@ https://blog.csdn.net/fly910905/article/details/120974621
    >
    >     ("nfsnobody" 是一个特殊的用户和组，通常用于映射在NFS服务器上没有对应用户或组的客户端请求。)
    >
-   >   - async/sync： 默认情况下，所有exportfs命令都将使用**异步**，即使用sync选项文件先保存在内存中，达到触发条件再发往服务端，性能较好，但存在风险。若使用同步async，则实时存到服务端。
+   >   - async/sync： 默认情况下，所有exportfs命令都将使用**异步**，即使用async选项文件先保存在内存中，达到触发条件再发往服务端，性能较好，但存在风险。若使用同步sync，则实时存到服务端。
    >
    >   **基于安全的最佳配置**：
    >
@@ -1219,16 +1237,16 @@ https://blog.csdn.net/fly910905/article/details/120974621
    >   mkdir /nfs_share
    >   chown nobody:nogroup /nfs_share/
    >   chmod 750 /nfs_share/
-   >             
+   >               
    >   #配置文件
    >   vi /etc/exports
-   >             
+   >               
    >   /nfs_share 192.168.20.236(rw,all_squash,sync) 
    >   #客户端所有用户在访问服务端都会以nobody用户访问，因此可以读写
-   >             
+   >               
    >   #配置文件生效
    >   exportfs -rav 
-   >             
+   >               
    >   #在192.168.20.236端mount
    >   sudo mount -t nfs 
    >   #查看
@@ -1237,7 +1255,7 @@ https://blog.csdn.net/fly910905/article/details/120974621
    >   total 8
    >   drwxr-x---  2 nobody nogroup 4096 Dec 20 15:01 ./
    >   drwxr-xr-x 12 aiedge aiedge  4096 Dec 19 14:48 ../
-   >             
+   >               
    >   ```
    >
    >   
