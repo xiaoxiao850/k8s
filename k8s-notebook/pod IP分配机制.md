@@ -65,7 +65,7 @@ kubelet核心流程：
 ### CNI-IPAM 分配 IP
 通过 CNI 官网 可查看当前支持的多种插件，分为 `Main`, `Meta`, `IPAM` 等多种类型，其中 IPAM (IP Address Management) 是专门进行 IP 地址分配的插件，支持三种子类型 `dhcp`, `host-local`, `static`。
 - `dhcp`：是通过 dhcp client 请求 dhcp server 服务进行动态 IP 分配，其依赖 CNI 插件可访问 dhcp 服务器，配置复杂度高，实际使用较少。
-- `host-local`：是最常见的使用方式，通过在宿主机 Node 上以文件读写的方式，进行 IP 分配与释放。其中 IP 分可配的 range 范围由上面 所述，通过 Controller 为每一个 Node 分配对应的 CIDR，**host-local 插件将从这个 Node CIDR 中动态分配 IP 给 Pod 使用**。
+- `host-local`：是最常见的使用方式，通过在宿主机 Node 上以文件读写的方式，进行 IP 分配与释放。其中 IP 可分配的 range 范围由上面 所述，通过 Controller 为每一个 Node 分配对应的 CIDR，**host-local 插件将从这个 Node CIDR 中动态分配 IP 给 Pod 使用**。
 - `static`：是通过直接指定 IP 地址，为 Pod 分配指定的 IP
 
 ## Pod IP 固定与回收
